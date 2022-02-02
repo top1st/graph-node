@@ -29,7 +29,7 @@ use crate::prelude::*;
 /// The type name of an entity. This is the string that is used in the
 /// subgraph's GraphQL schema as `type NAME @entity { .. }`
 #[derive(Clone, Debug, Serialize, Deserialize, PartialEq, Eq, PartialOrd, Ord, Hash)]
-pub struct EntityType(String);
+pub struct EntityType(pub String);
 
 impl EntityType {
     /// Construct a new entity type. Ideally, this is only called when
