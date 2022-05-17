@@ -7,7 +7,8 @@ use graph::{components::store::EntityType, data::graphql::ObjectOrInterface};
 
 use crate::execution::ast as a;
 use crate::schema::ast as sast;
-use crate::store::connection::is_connection_type;
+use crate::schema::is_connection_type;
+
 
 use super::prefetch::SelectedAttributes;
 
