@@ -175,6 +175,10 @@ fn build_filter_from_object(
 
                 let (field_name, op) = sast::parse_field_as_filter(key);
 
+                // let actual_entity = match entity.name().ends_with("Connection") {
+                //   true => entity.field("edges").unwrap().,
+                // }
+
                 let field = sast::get_field(entity, &field_name).ok_or_else(|| {
                     QueryExecutionError::EntityFieldError(
                         entity.name().to_owned(),
