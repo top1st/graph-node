@@ -158,14 +158,14 @@ fn test_schema(id: DeploymentHash, id_type: IdType) -> Schema {
         name: String!
         mainBand: Band
         bands: [Band!]!
-        writtenSongs: [Song]! @derivedFrom(field: \"writtenBy\")
+        writtenSongs: [Song!]! @derivedFrom(field: \"writtenBy\")
     }
 
     type Band @entity {
         id: ID!
         name: String!
         members: [Musician!]! @derivedFrom(field: \"bands\")
-        reviews: [BandReview] @derivedFrom(field: \"band\")
+        reviews: [BandReview!]! @derivedFrom(field: \"band\")
         originalSongs: [Song!]!
     }
 
@@ -175,7 +175,7 @@ fn test_schema(id: DeploymentHash, id_type: IdType) -> Schema {
         writtenBy: Musician!
         publisher: Publisher!
         band: Band @derivedFrom(field: \"originalSongs\")
-        reviews: [SongReview] @derivedFrom(field: \"song\")
+        reviews: [SongReview!]! @derivedFrom(field: \"song\")
     }
 
     type SongStat @entity {
@@ -211,9 +211,9 @@ fn test_schema(id: DeploymentHash, id_type: IdType) -> Schema {
     type User @entity {
         id: ID!
         name: String!
-        bandReviews: [BandReview] @derivedFrom(field: \"author\")
-        songReviews: [SongReview] @derivedFrom(field: \"author\")
-        reviews: [Review] @derivedFrom(field: \"author\")
+        bandReviews: [BandReview!]! @derivedFrom(field: \"author\")
+        songReviews: [SongReview!]! @derivedFrom(field: \"author\")
+        reviews: [Review!]! @derivedFrom(field: \"author\")
     }
     ";
 
