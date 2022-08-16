@@ -399,15 +399,10 @@ pub enum StatsCommand {
     ///
     /// Show how many distinct entities and how many versions the tables of
     /// each subgraph have. The data is based on the statistics that
-    /// Postgres keeps, and only refreshed when a table is analyzed. If a
-    /// table name is passed, perform a full count of entities and versions
-    /// in that table, which can be very slow, but is needed since the
-    /// statistics based data can be off by an order of magnitude.
+    /// Postgres keeps, and only refreshed when a table is analyzed.
     Show {
         /// The deployment (see `help info`).
         deployment: DeploymentSearch,
-        /// The name of a table to fully count
-        table: Option<String>,
     },
     /// Perform a SQL ANALYZE in a Entity table
     Analyze {
@@ -987,9 +982,7 @@ async fn main() -> anyhow::Result<()> {
                     deployment,
                     table,
                 } => commands::stats::account_like(ctx.pools(), clear, &deployment, table),
-                Show { deployment, table } => {
-                    commands::stats::show(ctx.pools(), &deployment, table)
-                }
+                Show { deployment } => commands::stats::show(ctx.pools(), &deployment),
                 Analyze { deployment, entity } => {
                     let (store, primary_pool) = ctx.store_and_primary();
                     let subgraph_store = store.subgraph_store();
