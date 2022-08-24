@@ -46,6 +46,8 @@ const REVIEWS_STRING: [&str; 5] = ["r0", "r1", "r2", "r3", "r4"];
 const REVIEWS_BYTES: [&str; 5] = ["0xf0", "0xf1", "0xf2", "0xf3", "0xf4"];
 const MEDIA_STRING: [&str; 7] = ["m0", "m1", "m2", "m3", "m4", "m5", "m6"];
 const MEDIA_BYTES: [&str; 7] = ["0xf0", "0xf1", "0xf2", "0xf3", "0xf4", "0xf5", "0xf6"];
+const RELEASES_STRING: [&str; 4] = ["rl0", "rl1", "rl2", "rl3"];
+const RELEASES_BYTES: [&str; 4] = ["0xf0", "0xf1", "0xf2", "0xf3"];
 
 #[derive(Clone, Copy, Debug)]
 enum IdType {
@@ -66,6 +68,13 @@ impl IdType {
         match self {
             IdType::String => REVIEWS_STRING.as_slice(),
             IdType::Bytes => REVIEWS_BYTES.as_slice(),
+        }
+    }
+
+    fn releases(&self) -> &[&str] {
+        match self {
+            IdType::String => RELEASES_STRING.as_slice(),
+            IdType::Bytes => RELEASES_BYTES.as_slice(),
         }
     }
 
@@ -186,6 +195,7 @@ fn test_schema(id: DeploymentHash, id_type: IdType) -> Schema {
         band: Band @derivedFrom(field: \"originalSongs\")
         reviews: [SongReview!]! @derivedFrom(field: \"song\")
         media: [Media!]!
+        release: Release! @derivedFrom(field: \"songs\")
     }
 
     type SongStat @entity {
@@ -246,6 +256,26 @@ fn test_schema(id: DeploymentHash, id_type: IdType) -> Schema {
         title: String!
         song: Song! @derivedFrom(field: \"media\")
     }
+
+    interface Release {
+        id: ID!
+        title: String!
+        songs: [Song!]!
+    }
+
+    type Single implements Release @entity {
+        id: ID!
+        title: String!
+        # It could be a single song
+        # but let's say a Single represents one song + bonus tracks
+        songs: [Song!]!
+    }
+
+    type Album implements Release @entity {
+        id: ID!
+        title: String!
+        songs: [Song!]!
+    }
     ";
 
     Schema::parse(&SCHEMA.replace("@ID@", id_type.as_str()), id).expect("Test schema invalid")
@@ -273,6 +303,7 @@ async fn insert_test_entities(
     let s = id_type.songs();
     let r = id_type.reviews();
     let m = id_type.medias();
+    let rl = id_type.releases();
     let entities0 = vec![
         entity! { __typename: "Musician", id: "m1", name: "John", mainBand: "b1", bands: vec!["b1", "b2"] },
         entity! { __typename: "Musician", id: "m2", name: "Lisa", mainBand: "b1", bands: vec!["b1"] },
@@ -296,7 +327,10 @@ async fn insert_test_entities(
         entity! { __typename: "Photo", id: m[3], title: "Rock Tune Single Cover" },
         entity! { __typename: "Video", id: m[4], title: "Rock Tune Music Video" },
         entity! { __typename: "Photo", id: m[5], title: "Pop Tune Single Cover" },
-        entity! { __typename: "Video", id: m[6], title: "Fol Tune Music Video" },
+        entity! { __typename: "Video", id: m[6], title: "Folk Tune Music Video" },
+        entity! { __typename: "Album", id: rl[1], title: "Pop and Folk", songs: vec![s[3], s[4]] },
+        entity! { __typename: "Single", id: rl[2], title: "Rock", songs: vec![s[2]] },
+        entity! { __typename: "Single", id: rl[3], title: "Cheesy", songs: vec![s[1]] },
     ];
 
     let entities1 = vec![
@@ -796,7 +830,7 @@ fn can_query_with_child_filter_on_derived_interface_list_field() {
 }
 
 #[test]
-fn can_query_with_child_filter_on_interface_field() {
+fn can_query_entity_by_child_entity_field() {
     const QUERY: &str = "
     query {
         users(first: 100, orderBy: id, where: { latestSongReview_: { body_starts_with: \"Good\" } }) {
@@ -820,7 +854,105 @@ fn can_query_with_child_filter_on_interface_field() {
 }
 
 #[test]
-fn can_query_with_child_filter_on_interface_list_field() {
+fn can_query_entity_by_child_interface_field() {
+    const QUERY: &str = "
+    query {
+        users(first: 100, orderBy: id, where: { latestReview_: { body_starts_with: \"Good\" } }) {
+            name
+            latestReview {
+                body
+            }
+        }
+    }";
+
+    run_query(QUERY, |result, _| {
+        let exp = object! {
+            users: vec![
+                object! { name: "Goodwill", latestReview: object! { body: "Good amateurs" } },
+            ]
+        };
+
+        let data = extract_data!(result).unwrap();
+        assert_eq!(data, exp);
+    })
+}
+
+#[test]
+fn can_query_interface_by_child_entity_field() {
+    const QUERY: &str = "
+    query {
+        reviews(first: 100, orderBy: id, where: { author_: { name_starts_with: \"Good\" } }) {
+            body
+            author {
+                name
+            }
+        }
+    }";
+
+    run_query(QUERY, |result, _| {
+        let exp = object! {
+            reviews: vec![
+                object! { body: "Good amateurs", author: object! { name: "Goodwill" } },
+                object! { body: "Good", author: object! { name: "Goodwill" } },
+            ]
+        };
+
+        let data = extract_data!(result).unwrap();
+        assert_eq!(data, exp);
+    })
+}
+
+#[test]
+fn can_query_entity_by_child_interface_derived_field() {
+    const QUERY: &str = "
+    query {
+        songs(first: 100, orderBy: id, where: { release_: { title_starts_with: \"Pop\" } }) {
+            title
+            release {
+                title
+            }
+        }
+    }";
+
+    run_query(QUERY, |result, _| {
+        let exp = object! {
+            songs: vec![
+                object! { title: "Pop Tune", release: object! { title: "Pop and Folk" } },
+                object! { title: "Folk Tune", release: object! { title: "Pop and Folk" } },
+            ]
+        };
+
+        let data = extract_data!(result).unwrap();
+        assert_eq!(data, exp);
+    })
+}
+
+#[test]
+fn can_query_interface_by_child_entity_derived_field() {
+    const QUERY: &str = "
+    query {
+        medias(first: 100, orderBy: id, where: { song_: { title_starts_with: \"Folk\" } }) {
+            title
+            song {
+                title
+            }
+        }
+    }";
+
+    run_query(QUERY, |result, _| {
+        let exp = object! {
+            medias: vec![
+                object! { title: "Folk Tune Music Video", song: object! { title: "Folk Tune" } },
+            ]
+        };
+
+        let data = extract_data!(result).unwrap();
+        assert_eq!(data, exp);
+    })
+}
+
+#[test]
+fn can_query_entity_by_child_interface_list_field() {
     const QUERY: &str = "
     query {
         songs(first: 100, orderBy: id, where: { media_: { title_starts_with: \"Cheesy Tune\" } }) {
@@ -837,6 +969,32 @@ fn can_query_with_child_filter_on_interface_list_field() {
                 object! { title: "Cheesy Tune", media: vec![
                     object! { title: "Cheesy Tune Single Cover" },
                     object! { title: "Cheesy Tune Music Video" }
+                ] },
+            ]
+        };
+
+        let data = extract_data!(result).unwrap();
+        assert_eq!(data, exp);
+    })
+}
+
+#[test]
+fn can_query_entity_by_child_interface_list_derived_field() {
+    const QUERY: &str = "
+    query {
+        songs(first: 100, orderBy: id, where: { reviews_: { body_starts_with: \"Good\" } }) {
+            title
+            reviews {
+                body
+            }
+        }
+    }";
+
+    run_query(QUERY, |result, _| {
+        let exp = object! {
+            songs: vec![
+                object! { title: "Pop Tune", reviews: vec![
+                    object! { body: "Good" },
                 ] },
             ]
         };
