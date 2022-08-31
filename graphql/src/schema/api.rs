@@ -172,7 +172,6 @@ fn field_enum_values(
     schema: &Document,
     fields: &[Field],
 ) -> Result<Vec<EnumValue>, APISchemaError> {
-    // if field has no @derivedFrom and is ObjectType or InterfaceType, extend
     let mut enum_values = vec![];
     for field in fields {
         enum_values.push(EnumValue {
@@ -190,6 +189,25 @@ fn field_enum_values(
     Ok(enum_values)
 }
 
+fn enum_value_from_child_entity_field(
+    schema: &Document,
+    parent_field: &Field,
+    field: &Field,
+) -> Option<EnumValue> {
+    if ast::is_list_or_non_null_list_field(field) || ast::is_entity_type(schema, &field.field_type)
+    {
+        // Sorting on lists or entities is not supported.
+        None
+    } else {
+        Some(EnumValue {
+            position: Pos::default(),
+            description: None,
+            name: format!("{}__{}", parent_field.name, field.name),
+            directives: vec![],
+        })
+    }
+}
+
 fn field_enum_values_from_child_entity(
     schema: &Document,
     field: &Field,
@@ -201,44 +219,16 @@ fn field_enum_values_from_child_entity(
                 .get_named_type(name)
                 .ok_or_else(|| APISchemaError::TypeNotFound(name.clone()))?;
             Ok(match named_type {
-                TypeDefinition::Object(ot) => {
-                    ot.fields
-                        .iter()
-                        .filter_map(|f| {
-                            if ast::is_list_or_non_null_list_field(f) {
-                                // Sorting on lists is not supported.
-                                None
-                            } else {
-                                Some(EnumValue {
-                                    position: Pos::default(),
-                                    description: None,
-                                    name: format!("{}__{}", field.name, f.name),
-                                    directives: vec![],
-                                })
-                            }
-                        })
-                        .collect()
-                }
-                // sorting for interfaces is not supported yet
-                // hard to pick correct table and pass the EntityType to EntityOrder::Ascending(EntityType)
-                TypeDefinition::Interface(i) => {
-                    i.fields
-                        .iter()
-                        .filter_map(|f| {
-                            if ast::is_list_or_non_null_list_field(f) {
-                                // Sorting on lists is not supported.
-                                None
-                            } else {
-                                Some(EnumValue {
-                                    position: Pos::default(),
-                                    description: None,
-                                    name: format!("{}__{}", field.name, f.name),
-                                    directives: vec![],
-                                })
-                            }
-                        })
-                        .collect()
-                }
+                TypeDefinition::Object(ot) => ot
+                    .fields
+                    .iter()
+                    .filter_map(|f| enum_value_from_child_entity_field(schema, field, f))
+                    .collect(),
+                TypeDefinition::Interface(i) => i
+                    .fields
+                    .iter()
+                    .filter_map(|f| enum_value_from_child_entity_field(schema, field, f))
+                    .collect(),
                 _ => vec![],
             })
         }
