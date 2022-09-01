@@ -562,6 +562,57 @@ fn can_query_many_to_many_relationship() {
 }
 
 #[test]
+fn can_query_with_child_sorting() {
+    let query: &str = "
+    query {
+        musicians(first: 100, orderBy: mainBand__name, orderDirection: desc) {
+            name
+            mainBand {
+                name
+            }
+        }
+    }";
+
+    run_query(query, |result, _| {
+        let exp = object! {
+            musicians: vec![
+                object! { name: "Valerie", mainBand: r::Value::Null },
+                object! { name: "Lisa", mainBand: object! { name: "The Musicians" } },
+                object! { name: "John", mainBand: object! { name: "The Musicians" } },
+                object! { name: "Tom",  mainBand: object! { name: "The Amateurs"} },
+                ]
+        };
+
+        let data = extract_data!(result).unwrap();
+        assert_eq!(data, exp);
+    });
+
+    let query = "
+    query {
+        musicians(first: 100, orderBy: mainBand__name, orderDirection: asc) {
+            name
+            mainBand {
+                name
+            }
+        }
+    }";
+
+    run_query(query, |result, _| {
+        let exp = object! {
+            musicians: vec![
+                object! { name: "Tom",  mainBand: object! { name: "The Amateurs"} },
+                object! { name: "John", mainBand: object! { name: "The Musicians" } },
+                object! { name: "Lisa", mainBand: object! { name: "The Musicians" } },
+                object! { name: "Valerie", mainBand: r::Value::Null },
+                ]
+        };
+
+        let data = extract_data!(result).unwrap();
+        assert_eq!(data, exp);
+    })
+}
+
+#[test]
 fn can_query_with_child_filter_on_list_type_field() {
     const QUERY: &str = "
     query {

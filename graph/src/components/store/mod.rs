@@ -251,6 +251,10 @@ pub enum EntityOrder {
     Ascending(String, ValueType),
     /// Order descending by the given attribute. Use `id` as a tie-breaker
     Descending(String, ValueType),
+    /// Order ascending by the given attribute of a child entity. Use `id` as a tie-breaker
+    ChildAscending(EntityType, String, String, ValueType, bool),
+    /// Order descending by the given attribute of a child entity. Use `id` as a tie-breaker
+    ChildDescending(EntityType, String, String, ValueType, bool),
     /// Order by the `id` of the entities
     Default,
     /// Do not order at all. This speeds up queries where we know that
