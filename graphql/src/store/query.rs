@@ -377,7 +377,11 @@ fn build_order_by(
                         Some((
                             child_field_name.to_owned(),
                             value_type,
-                            Some((base_type.into(), parent_field_name, derived)),
+                            Some((
+                                EntityType::new(base_type.into()),
+                                parent_field_name,
+                                derived,
+                            )),
                         ))
                     })
                     .map_err(|_| {
