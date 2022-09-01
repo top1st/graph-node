@@ -2858,7 +2858,9 @@ impl<'a> SortKey<'a> {
                 direction: _,
                 prefix: _,
             } => {
-                return Err(diesel::result::Error::QueryBuilderError("SortKey::ChildKey cannot be used for parent ordering (yet)".into()));
+                return Err(diesel::result::Error::QueryBuilderError(
+                    "SortKey::ChildKey cannot be used for parent ordering (yet)".into(),
+                ));
             }
         }
     }
