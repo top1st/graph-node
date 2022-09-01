@@ -2782,20 +2782,20 @@ impl<'a> SortKey<'a> {
         match self {
             SortKey::None => Ok(()),
             SortKey::IdAsc(br_column) => {
-                out.push_sql("order by c.");
+                out.push_sql("order by ");
                 out.push_identifier(PRIMARY_KEY_COLUMN)?;
                 if let Some(br_column) = br_column {
-                    out.push_sql(", c.");
+                    out.push_sql(", ");
                     br_column.bare_name(out);
                 }
                 Ok(())
             }
             SortKey::IdDesc(br_column) => {
-                out.push_sql("order by c.");
+                out.push_sql("order by ");
                 out.push_identifier(PRIMARY_KEY_COLUMN)?;
                 out.push_sql(" desc");
                 if let Some(br_column) = br_column {
-                    out.push_sql(", c.");
+                    out.push_sql(", ");
                     br_column.bare_name(out);
                     out.push_sql(" desc");
                 }
