@@ -2933,10 +2933,10 @@ impl<'a> SortKey<'a> {
     fn add_child(&self, block: BlockNumber, out: &mut AstPass<Pg>) -> QueryResult<()> {
         match self {
             SortKey::ChildKey {
-                parent_table,
                 child_table,
                 child_column,
                 parent_column,
+                parent_table: _,
                 column: _,
                 prefix,
                 value: _,
@@ -3004,7 +3004,6 @@ impl QueryFragment<Pg> for FilterRange {
 #[derive(Debug, Clone)]
 pub struct FilterQuery<'a> {
     collection: &'a FilterCollection<'a>,
-    layout: &'a Layout,
     sort_key: SortKey<'a>,
     range: FilterRange,
     block: BlockNumber,
@@ -3040,7 +3039,6 @@ impl<'a> FilterQuery<'a> {
 
         Ok(FilterQuery {
             collection,
-            layout,
             sort_key,
             range: FilterRange(range),
             block,
