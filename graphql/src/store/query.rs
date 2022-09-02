@@ -372,16 +372,25 @@ fn build_order_by(
                         )
                     })?;
 
+                let join_attr = match derived {
+                    true => sast::get_derived_from_field(child_entity, field)
+                        .ok_or_else(|| {
+                            QueryExecutionError::EntityFieldError(
+                                entity.name().to_string(),
+                                field.name.to_string(),
+                            )
+                        })?
+                        .name
+                        .to_string(),
+                    false => parent_field_name,
+                };
+
                 sast::get_field_value_type(&child_field.field_type)
                     .map(|value_type| {
                         Some((
                             child_field_name.to_owned(),
                             value_type,
-                            Some((
-                                EntityType::new(base_type.into()),
-                                parent_field_name,
-                                derived,
-                            )),
+                            Some((EntityType::new(base_type.into()), join_attr, derived)),
                         ))
                     })
                     .map_err(|_| {

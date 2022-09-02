@@ -562,10 +562,16 @@ fn can_query_many_to_many_relationship() {
 }
 
 #[test]
-fn can_query_with_child_sorting() {
-    let query: &str = "
+fn can_query_with_sorting_by_child_entity() {
+    const QUERY: &str = "
     query {
-        musicians(first: 100, orderBy: mainBand__name, orderDirection: desc) {
+        desc: musicians(first: 100, orderBy: mainBand__name, orderDirection: desc) {
+            name
+            mainBand {
+                name
+            }
+        }
+        asc: musicians(first: 100, orderBy: mainBand__name, orderDirection: asc) {
             name
             mainBand {
                 name
@@ -573,33 +579,15 @@ fn can_query_with_child_sorting() {
         }
     }";
 
-    run_query(query, |result, _| {
+    run_query(QUERY, |result, _| {
         let exp = object! {
-            musicians: vec![
+            desc: vec![
                 object! { name: "Valerie", mainBand: r::Value::Null },
                 object! { name: "Lisa", mainBand: object! { name: "The Musicians" } },
                 object! { name: "John", mainBand: object! { name: "The Musicians" } },
                 object! { name: "Tom",  mainBand: object! { name: "The Amateurs"} },
-                ]
-        };
-
-        let data = extract_data!(result).unwrap();
-        assert_eq!(data, exp);
-    });
-
-    let query = "
-    query {
-        musicians(first: 100, orderBy: mainBand__name, orderDirection: asc) {
-            name
-            mainBand {
-                name
-            }
-        }
-    }";
-
-    run_query(query, |result, _| {
-        let exp = object! {
-            musicians: vec![
+                ],
+            asc: vec![
                 object! { name: "Tom",  mainBand: object! { name: "The Amateurs"} },
                 object! { name: "John", mainBand: object! { name: "The Musicians" } },
                 object! { name: "Lisa", mainBand: object! { name: "The Musicians" } },
@@ -610,6 +598,86 @@ fn can_query_with_child_sorting() {
         let data = extract_data!(result).unwrap();
         assert_eq!(data, exp);
     })
+}
+
+#[test]
+fn can_query_with_sorting_by_derived_child_entity() {
+    let query: &str = "
+    query {
+        desc: songStats(first: 100, orderBy: song__title, orderDirection: desc) {
+            id
+            song {
+              id
+              title
+            }
+            played
+        }
+        asc: songStats(first: 100, orderBy: song__title, orderDirection: asc) {
+            id
+            song {
+              id
+              title
+            }
+            played
+        }
+    }";
+
+    run_query(query, |result, id_type| {
+        let s = id_type.songs();
+        let exp = object! {
+            desc: vec![
+                object! {
+                    id: s[2],
+                    song: object! { id: s[2], title: "Rock Tune" },
+                    played: 15
+                },
+                object! {
+                    id: s[1],
+                    song: object! { id: s[1], title: "Cheesy Tune" },
+                    played: 10,
+                }
+            ],
+            asc: vec![
+                object! {
+                    id: s[1],
+                    song: object! { id: s[1], title: "Cheesy Tune" },
+                    played: 10,
+                },
+                object! {
+                    id: s[2],
+                    song: object! { id: s[2], title: "Rock Tune" },
+                    played: 15
+                }
+            ]
+        };
+
+        let data = extract_data!(result).unwrap();
+        assert_eq!(data, exp);
+    });
+
+    // let query: &str = "
+    // query {
+    //     songs(first: 100, orderBy: band__name, orderDirection: desc) {
+    //         title
+    //         band {
+    //             name
+    //         }
+    //     }
+    // }";
+
+    // run_query(query, |result, _| {
+    //     let exp = object! {
+    //         musicians: vec![
+    //             object! { name: "Tom",  mainBand: object! { name: "The Amateurs"} },
+    //             object! { name: "John", mainBand: object! { name: "The Musicians" } },
+    //             object! { name: "Lisa", mainBand: object! { name: "The Musicians" } },
+    //             object! { name: "Valerie", mainBand: r::Value::Null },
+    //             ]
+    //     };
+
+    //     let data = extract_data!(result).unwrap();
+    //     assert_eq!(data, exp);
+    // })
 }
 
 #[test]

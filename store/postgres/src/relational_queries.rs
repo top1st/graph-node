@@ -2664,11 +2664,15 @@ impl<'a> SortKey<'a> {
             } else {
                 let (parent_column, child_column) = match derived {
                     true => (
-                        child_table.column_for_field(&join_attribute)?,
                         parent_table.primary_key(),
+                        child_table
+                            .column_for_field(&join_attribute)
+                            .expect("Column for a join attribute not found"),
                     ),
                     false => (
-                        parent_table.column_for_field(&join_attribute)?,
+                        parent_table
+                            .column_for_field(&join_attribute)
+                            .expect("Column for a join attribute not found"),
                         child_table.primary_key(),
                     ),
                 };
@@ -2934,9 +2938,9 @@ impl<'a> SortKey<'a> {
         match self {
             SortKey::ChildKey {
                 child_table,
+                parent_table: _,
                 child_column,
                 parent_column,
-                parent_table: _,
                 column: _,
                 prefix,
                 value: _,
@@ -2944,13 +2948,51 @@ impl<'a> SortKey<'a> {
             } => {
                 out.push_sql(" left join ");
                 out.push_sql(child_table.qualified_name.as_str());
-                out.push_sql(format!(" as {prefix} on ({prefix}.").as_str());
+                out.push_sql(format!(" as {prefix} on (").as_str());
 
-                out.push_identifier(child_column.name.as_str())?;
-                out.push_sql(" = c.");
-                out.push_identifier(parent_column.name.as_str())?;
+                if child_column.is_list() {
+                    println!(
+                        "Type C c.{} = any(cc.{})",
+                        parent_column.name.as_str(),
+                        child_column.name.as_str()
+                    );
+                    // Type C: p.id = any(c.child_ids)
+                    out.push_sql("c.");
+                    out.push_identifier(parent_column.name.as_str())?;
+                    out.push_sql(" = any(");
+                    out.push_sql(prefix);
+                    out.push_sql(".");
+                    out.push_identifier(child_column.name.as_str())?;
+                    out.push_sql(")");
+                } else if parent_column.is_list() {
+                    println!(
+                        "Type A cc.{} = any(c.{})",
+                        child_column.name.as_str(),
+                        parent_column.name.as_str()
+                    );
+                    // Type A: c.id = any(p.{parent_field})
+                    out.push_sql(prefix);
+                    out.push_sql(".");
+                    out.push_identifier(child_column.name.as_str())?;
+                    out.push_sql(" = any(c.");
+                    out.push_identifier(parent_column.name.as_str())?;
+                    out.push_sql(")");
+                } else {
+                    println!(
+                        "Type B cc.{} = c.{}",
+                        child_column.name.as_str(),
+                        parent_column.name.as_str()
+                    );
+                    // Type B: c.id = p.{parent_field}
+                    out.push_sql(prefix);
+                    out.push_sql(".");
+                    out.push_identifier(child_column.name.as_str())?;
+                    out.push_sql(" = ");
+                    out.push_sql("c.");
+                    out.push_identifier(parent_column.name.as_str())?;
+                }
 
-                out.push_sql(" and cc.");
+                out.push_sql(format!(" and {prefix}.").as_str());
                 out.push_identifier(BLOCK_RANGE_COLUMN)?;
                 out.push_sql(" @> ");
                 out.push_bind_param::<Integer, _>(&block)?;
