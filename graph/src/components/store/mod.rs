@@ -244,6 +244,28 @@ impl EntityFilter {
     }
 }
 
+#[derive(Clone, Debug, PartialEq)]
+pub struct EntityOrderByChildObject {
+    pub entity_type: EntityType,
+    pub attribute: Attribute,
+    pub join_attribute: Attribute,
+    pub derived: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub struct EntityOrderByChildInterface {
+    pub entity_types: Vec<EntityType>,
+    pub attribute: Attribute,
+    pub join_attribute: Attribute,
+    pub derived: bool,
+}
+
+#[derive(Clone, Debug, PartialEq)]
+pub enum EntityOrderChild {
+    Object(EntityOrderByChildObject),
+    Interface(EntityOrderByChildInterface),
+}
+
 /// The order in which entities should be restored from a store.
 #[derive(Clone, Debug, PartialEq)]
 pub enum EntityOrder {
@@ -252,9 +274,9 @@ pub enum EntityOrder {
     /// Order descending by the given attribute. Use `id` as a tie-breaker
     Descending(String, ValueType),
     /// Order ascending by the given attribute of a child entity. Use `id` as a tie-breaker
-    ChildAscending(EntityType, String, String, ValueType, bool),
+    ChildAscending(EntityOrderChild),
     /// Order descending by the given attribute of a child entity. Use `id` as a tie-breaker
-    ChildDescending(EntityType, String, String, ValueType, bool),
+    ChildDescending(EntityOrderChild),
     /// Order by the `id` of the entities
     Default,
     /// Do not order at all. This speeds up queries where we know that

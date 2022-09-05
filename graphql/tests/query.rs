@@ -164,6 +164,7 @@ fn test_schema(id: DeploymentHash, id_type: IdType) -> Schema {
         writtenBy: Musician!
         publisher: Publisher!
         band: Band @derivedFrom(field: \"originalSongs\")
+        reviews: [Review!]! @derivedFrom(field: \"song\")
     }
 
     type SongStat @entity {
@@ -174,6 +175,30 @@ fn test_schema(id: DeploymentHash, id_type: IdType) -> Schema {
 
     type Publisher {
         id: Bytes!
+    }
+
+    type Review @entity {
+        id: ID!
+        body: String!
+        author: Author!
+        song: Song!
+    }
+
+    interface Author {
+        id: ID!
+        name: String!
+    }
+
+    type User implements Author @entity {
+        id: ID!
+        name: String!
+        reviews: [Review!]! @derivedFrom(field: \"author\")
+    }
+
+    type AnonymousUser implements Author @entity {
+        id: ID!
+        name: String!
+        reviews: [Review!]! @derivedFrom(field: \"author\")
     }
     ";
 
@@ -212,6 +237,10 @@ async fn insert_test_entities(
         entity! { __typename: "Song", id: s[4], title: "Folk Tune",    publisher: "0xb1", writtenBy: "m3" },
         entity! { __typename: "SongStat", id: s[1], played: 10 },
         entity! { __typename: "SongStat", id: s[2], played: 15 },
+        entity! { __typename: "Review", id: "r1", body: "Bad", song: s[1], author: "au1" },
+        entity! { __typename: "Review", id: "r2", body: "Good", song: s[2], author: "u1" },
+        entity! { __typename: "User", id: "u1", name: "Mark" },
+        entity! { __typename: "AnonymousUser", id: "au1", name: "Anonymous 1" },
     ];
 
     let entities1 = vec![
@@ -602,7 +631,7 @@ fn can_query_with_sorting_by_child_entity() {
 
 #[test]
 fn can_query_with_sorting_by_derived_child_entity() {
-    let query: &str = "
+    const QUERY: &str = "
     query {
         desc: songStats(first: 100, orderBy: song__title, orderDirection: desc) {
             id
@@ -622,7 +651,7 @@ fn can_query_with_sorting_by_derived_child_entity() {
         }
     }";
 
-    run_query(query, |result, id_type| {
+    run_query(QUERY, |result, id_type| {
         let s = id_type.songs();
         let exp = object! {
             desc: vec![
@@ -653,32 +682,102 @@ fn can_query_with_sorting_by_derived_child_entity() {
 
         let data = extract_data!(result).unwrap();
         assert_eq!(data, exp);
-    });
-
-    // let query: &str = "
-    // query {
-    //     songs(first: 100, orderBy: band__name, orderDirection: desc) {
-    //         title
-    //         band {
-    //             name
-    //         }
-    //     }
-    // }";
-
-    // run_query(query, |result, _| {
-    //     let exp = object! {
-    //         musicians: vec![
-    //             object! { name: "Tom",  mainBand: object! { name: "The Amateurs"} },
-    //             object! { name: "John", mainBand: object! { name: "The Musicians" } },
-    //             object! { name: "Lisa", mainBand: object! { name: "The Musicians" } },
-    //             object! { name: "Valerie", mainBand: r::Value::Null },
-    //             ]
-    //     };
-
-    //     let data = extract_data!(result).unwrap();
-    //     assert_eq!(data, exp);
-    // })
+    })
 }
+
+#[test]
+fn can_query_with_sorting_by_child_interface() {
+    const QUERY: &str = "
+    query {
+        desc: reviews(first: 100, orderBy: author__name, orderDirection: desc) {
+            body
+            author {
+                name
+            }
+        }
+        asc: reviews(first: 100, orderBy: author__name, orderDirection: asc) {
+            body
+            author {
+                name
+            }
+        }
+    }";
+
+    run_query(QUERY, |result, _| {
+        let exp = object! {
+            desc: vec![
+                object! { body: "Good", author: object! { name: "Mark" } },
+                object! { body: "Bad", author: object! { name: "Anonymous 1" } },
+                ],
+            asc: vec![
+                object! { body: "Bad",  author: object! { name: "Anonymous 1"} },
+                object! { body: "Good", author: object! { name: "Mark" } },
+                ]
+        };
+
+        let data = extract_data!(result).unwrap();
+        assert_eq!(data, exp);
+    })
+}
+
+#[test]
+fn can_query_interface_with_sorting_by_child_entity() {
+    const QUERY: &str = "
+    query {
+        desc: songStats(first: 100, orderBy: song__title, orderDirection: desc) {
+            id
+            song {
+              id
+              title
+            }
+            played
+        }
+        asc: songStats(first: 100, orderBy: song__title, orderDirection: asc) {
+            id
+            song {
+              id
+              title
+            }
+            played
+        }
+    }";
+
+    run_query(QUERY, |result, id_type| {
+        let s = id_type.songs();
+        let exp = object! {
+            desc: vec![
+                object! {
+                    id: s[2],
+                    song: object! { id: s[2], title: "Rock Tune" },
+                    played: 15
+                },
+                object! {
+                    id: s[1],
+                    song: object! { id: s[1], title: "Cheesy Tune" },
+                    played: 10,
+                }
+            ],
+            asc: vec![
+                object! {
+                    id: s[1],
+                    song: object! { id: s[1], title: "Cheesy Tune" },
+                    played: 10,
+                },
+                object! {
+                    id: s[2],
+                    song: object! { id: s[2], title: "Rock Tune" },
+                    played: 15
+                }
+            ]
+        };
+
+        let data = extract_data!(result).unwrap();
+        assert_eq!(data, exp);
+    })
+}
+
+#[test]
+fn can_query_interface_with_sorting_by_derived_child_entity() {}
 
 #[test]
 fn can_query_with_child_filter_on_list_type_field() {
