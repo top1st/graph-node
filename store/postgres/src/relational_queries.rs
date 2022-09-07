@@ -2521,26 +2521,26 @@ impl<'a> FilterCollection<'a> {
     }
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub struct ChildKeyDetails<'a> {
     pub parent_table: &'a Table,
     pub parent_column: &'a Column,
     pub child_table: &'a Table,
     pub child_column: &'a Column,
     pub column: &'a Column,
-    pub prefix: &'a str,
+    pub prefix: String,
     pub direction: &'static str,
 }
 
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub enum ChildKey<'a> {
     Single(ChildKeyDetails<'a>),
-    Many(&'a Vec<ChildKeyDetails<'a>>),
+    Many(Vec<ChildKeyDetails<'a>>),
 }
 
 /// Convenience to pass the name of the column to order by around. If `name`
 /// is `None`, the sort key should be ignored
-#[derive(Debug, Copy, Clone)]
+#[derive(Debug, Clone)]
 pub enum SortKey<'a> {
     None,
     /// Order by `id asc`
@@ -2693,7 +2693,7 @@ impl<'a> SortKey<'a> {
                     child_column,
                     /// Sort by this column
                     column: sort_by_column,
-                    prefix: "cc",
+                    prefix: "cc".to_string(),
                     direction,
                 })))
             }
@@ -2705,57 +2705,54 @@ impl<'a> SortKey<'a> {
             parent_table: &'a Table,
             layout: &'a Layout,
         ) -> Result<SortKey<'a>, QueryExecutionError> {
-            let entity_types = &children.entity_types;
-            let derived = children.derived;
-            let join_attribute = &children.join_attribute;
-            let attribute = &children.attribute;
             let mut i = 0;
-            let items: Result<Vec<ChildKeyDetails<'a>>, QueryExecutionError> = entity_types
-                .iter()
-                .map(|entity_type| {
-                    let child_table = layout.table_for_entity(entity_type)?;
-                    let sort_by_column = child_table.column_for_field(attribute)?;
-                    if sort_by_column.is_fulltext() {
-                        Err(QueryExecutionError::NotSupported(
-                            "Sorting by fulltext fields".to_string(),
-                        ))
-                    } else if sort_by_column.is_primary_key() {
-                        Err(QueryExecutionError::NotSupported(
-                            "Sorting by id".to_string(),
-                        ))
-                    } else {
-                        let (parent_column, child_column) = match derived {
-                            true => (
-                                parent_table.primary_key(),
-                                child_table
-                                    .column_for_field(join_attribute)
-                                    .expect("Column for a join attribute not found"),
-                            ),
-                            false => (
-                                parent_table
-                                    .column_for_field(join_attribute)
-                                    .expect("Column for a join attribute not found"),
-                                child_table.primary_key(),
-                            ),
-                        };
 
-                        i += 1;
+            Ok(SortKey::ChildKey(ChildKey::Many(
+                children
+                    .entity_types
+                    .iter()
+                    .map(|entity_type| {
+                        let child_table = layout.table_for_entity(entity_type)?;
+                        let sort_by_column = child_table.column_for_field(&children.attribute)?;
+                        if sort_by_column.is_fulltext() {
+                            Err(QueryExecutionError::NotSupported(
+                                "Sorting by fulltext fields".to_string(),
+                            ))
+                        } else if sort_by_column.is_primary_key() {
+                            Err(QueryExecutionError::NotSupported(
+                                "Sorting by id".to_string(),
+                            ))
+                        } else {
+                            let (parent_column, child_column) = match children.derived {
+                                true => (
+                                    parent_table.primary_key(),
+                                    child_table
+                                        .column_for_field(&children.join_attribute)
+                                        .expect("Column for a join attribute not found"),
+                                ),
+                                false => (
+                                    parent_table
+                                        .column_for_field(&children.join_attribute)
+                                        .expect("Column for a join attribute not found"),
+                                    child_table.primary_key(),
+                                ),
+                            };
 
-                        Ok(ChildKeyDetails {
-                            parent_table,
-                            parent_column,
-                            child_table,
-                            child_column,
-                            column: sort_by_column,
-                            prefix: &format!("cc{}", i),
-                            direction,
-                        })
-                    }
-                })
-                .collect();
-            let result = items?;
+                            i += 1;
 
-            Ok(SortKey::ChildKey(ChildKey::Many(&result.clone())))
+                            Ok(ChildKeyDetails {
+                                parent_table,
+                                parent_column,
+                                child_table,
+                                child_column,
+                                column: sort_by_column,
+                                prefix: format!("cc{}", i),
+                                direction,
+                            })
+                        }
+                    })
+                    .collect::<Result<Vec<ChildKeyDetails<'a>>, QueryExecutionError>>()?,
+            )))
         }
 
         // If there is more than one table, we are querying an interface,
@@ -2799,9 +2796,9 @@ impl<'a> SortKey<'a> {
                     child.attribute,
                     DESC,
                 ),
-                EntityOrderChild::Interface(_) => Err(QueryExecutionError::NotSupported(
-                    "Sorting by interface".to_string(),
-                )),
+                EntityOrderChild::Interface(children) => {
+                    with_child_interface_key(children, DESC, table, layout)
+                }
             },
         }
     }
@@ -2887,26 +2884,28 @@ impl<'a> SortKey<'a> {
                 out.push_sql("order by ");
                 SortKey::sort_expr(column, value, direction, None, None, out)
             }
-            SortKey::ChildKey(child)
-            // {
-            //     column,
-            //     value,
-            //     direction,
-            //     prefix,
-            //     parent_table: _,
-            //     child_table: _,
-            //     parent_column: _,
-            //     child_column: _,
-            // } 
-            => {
+            SortKey::ChildKey(child) => {
                 out.push_sql("order by ");
                 match child {
-                    ChildKey::Single(child) => SortKey::sort_expr(child.column, &None, child.direction, Some(child.prefix), Some("c"), out),
+                    ChildKey::Single(child) => SortKey::sort_expr(
+                        child.column,
+                        &None,
+                        child.direction,
+                        Some(&child.prefix),
+                        Some("c"),
+                        out,
+                    ),
                     ChildKey::Many(children) => {
-                        for child in children.iter() {
-                            SortKey::sort_expr(child.column, &None, child.direction, Some(child.prefix), Some("c"), out)?   
-                        }
-                        Ok(())
+                        let columns: Vec<(&Column, &str)> = children
+                            .iter()
+                            .map(|child| (child.column, child.prefix.as_str()))
+                            .collect();
+                        SortKey::multi_sort_expr(
+                            columns,
+                            children.first().unwrap().direction,
+                            Some("c"),
+                            out,
+                        )
                     }
                 }
             }
@@ -3009,6 +3008,69 @@ impl<'a> SortKey<'a> {
         Ok(())
     }
 
+    /// Generate
+    ///   [COALESCE(name1, name2) direction,] COALESCE(id1, id2)
+    fn multi_sort_expr(
+        columns: Vec<(&Column, &str)>,
+        direction: &str,
+        rest_prefix: Option<&str>,
+        out: &mut AstPass<Pg>,
+    ) -> QueryResult<()> {
+        for (column, _) in columns.iter() {
+            if column.is_primary_key() {
+                // This shouldn't happen since we'd use SortKey::IdAsc/Desc
+                return Err(constraint_violation!(
+                    "multi_sort_expr called with primary key column"
+                ));
+            }
+
+            match column.column_type {
+                ColumnType::TSVector(_) => {
+                    return Err(constraint_violation!("TSVector is not supported"));
+                }
+                _ => {}
+            }
+        }
+
+        fn push_prefix(prefix: Option<&str>, out: &mut AstPass<Pg>) {
+            if let Some(prefix) = prefix {
+                out.push_sql(prefix);
+                out.push_sql(".");
+            }
+        }
+
+        out.push_sql("coalesce(");
+
+        for (i, (column, prefix)) in columns.iter().enumerate() {
+            if i != 0 {
+                out.push_sql(", ");
+            }
+
+            let name = column.name.as_str();
+            push_prefix(Some(prefix), out);
+            out.push_identifier(name)?;
+        }
+
+        out.push_sql(") ");
+
+        if ENV_VARS.store.reversible_order_by_off {
+            // Old behavior
+            out.push_sql(direction);
+            out.push_sql(" nulls last");
+            out.push_sql(", ");
+            push_prefix(rest_prefix, out);
+            out.push_identifier(PRIMARY_KEY_COLUMN)?;
+        } else {
+            out.push_sql(direction);
+            out.push_sql(", ");
+            push_prefix(rest_prefix, out);
+            out.push_identifier(PRIMARY_KEY_COLUMN)?;
+            out.push_sql(" ");
+            out.push_sql(direction);
+        }
+        Ok(())
+    }
+
     fn add_child(&self, block: BlockNumber, out: &mut AstPass<Pg>) -> QueryResult<()> {
         fn add(
             block: BlockNumber,
@@ -3081,7 +3143,7 @@ impl<'a> SortKey<'a> {
                         &child.child_table,
                         &child.child_column,
                         &child.parent_column,
-                        child.prefix,
+                        &child.prefix,
                         out,
                     )?;
                 }
@@ -3092,7 +3154,7 @@ impl<'a> SortKey<'a> {
                             &child.child_table,
                             &child.child_column,
                             &child.parent_column,
-                            child.prefix,
+                            &child.prefix,
                             out,
                         )?;
                     }
