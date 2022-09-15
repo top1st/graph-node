@@ -457,7 +457,9 @@ impl EthereumAdapter {
                         max_priority_fee_per_gas: None,
                         transaction_type: None,
                     };
-                    let result = web3.eth().call(req, Some(block_id)).boxed().await;
+                    
+                    // let result = web3.eth().call(req, Some(block_id)).boxed().await;
+                    let result = web3.eth().call(req, Some("latest")).boxed().await;
 
                     // Try to check if the call was reverted. The JSON-RPC response for reverts is
                     // not standardized, so we have ad-hoc checks for each Ethereum client.
